@@ -1,0 +1,13 @@
+.venv/
+.runtime/
+.tools/
+.snakemake/
+.pytest_cache/
+__pycache__/
+*.egg-info/
+data/
+results/
+tmp/
+dist/
+*.pyc
+

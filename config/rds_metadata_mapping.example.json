@@ -1,0 +1,9 @@
+{
+  "donor": "donor",
+  "batch": "batch",
+  "condition": "condition",
+  "cell_type": "cell_type",
+  "role": "role",
+  "target": "target",
+  "included": "included"
+}

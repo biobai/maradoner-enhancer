@@ -1,0 +1,15 @@
+name: enhancer-core
+channels: [conda-forge, bioconda]
+dependencies:
+  - python=3.11
+  - pip
+  - numpy=2.2
+  - pandas=2.2
+  - scipy=1.15
+  - pyarrow=19
+  - pyyaml=6
+  - pyfaidx=0.8
+  - psutil
+  - anndata=0.11
+  - snakemake-minimal=8.25
+  - git

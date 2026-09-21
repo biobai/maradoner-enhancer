@@ -1,0 +1,52 @@
+"""Stage scheduler. Content fingerprints in the runner detect config/source changes.
+
+Run: snakemake -s workflow/Snakefile --config project=config/project.yaml --cores 8
+The stage runner additionally validates hashes; --forcerun report rechecks caches.
+"""
+from pathlib import Path
+from me.io import config as load_config
+
+CFG = load_config(config.get("project", "config/project.yaml"))
+OUT = CFG["output"]
+CONFIG = CFG["_config"]
+SOURCES = [str(p) for p in (Path(CFG["_root"]) / "src/me").glob("*.py")]
+
+rule all:
+    input: f"{OUT}/report/success.json"
+
+rule validate:
+    input: CONFIG, *list(CFG["inputs"].values()), *SOURCES
+    output: f"{OUT}/validate/success.json"
+    run:
+        from me.pipeline import pipeline
+        pipeline(CFG, "validate")
+
+rule features:
+    input: f"{OUT}/validate/success.json"
+    output: f"{OUT}/features/success.json"
+    run:
+        from me.pipeline import pipeline
+        pipeline(CFG, "features")
+
+rule fit:
+    input: f"{OUT}/features/success.json"
+    output: f"{OUT}/fit/success.json"
+    threads: CFG["resources"]["cores"]
+    resources: mem_mb=int(CFG["resources"]["memory_gb"] * 1024)
+    run:
+        from me.pipeline import pipeline
+        pipeline(CFG, "fit")
+
+rule evaluate:
+    input: f"{OUT}/fit/success.json"
+    output: f"{OUT}/evaluate/success.json"
+    run:
+        from me.pipeline import pipeline
+        pipeline(CFG, "evaluate")
+
+rule report:
+    input: f"{OUT}/evaluate/success.json"
+    output: f"{OUT}/report/success.json"
+    run:
+        from me.pipeline import pipeline
+        pipeline(CFG, "report")

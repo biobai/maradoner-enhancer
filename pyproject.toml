@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maradoner-enhancer"
+version = "0.1.0"
+description = "Auditable enhancer integration and TF perturbation benchmark"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.1,<3", "pandas>=2.2,<4", "scipy>=1.14,<2", "pyarrow>=17", "PyYAML>=6", "pyfaidx>=0.8", "psutil>=6"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+singlecell = ["anndata>=0.11"]
+workflow = ["snakemake>=8,<10"]
+
+[project.scripts]
+me = "me.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+

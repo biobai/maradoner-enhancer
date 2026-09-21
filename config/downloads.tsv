@@ -1,0 +1,6 @@
+id	url	filename	source	version	sha256
+posterior_atlas_metadata	https://www.ebi.ac.uk/biostudies/api/v1/studies/E-MTAB-15659	E-MTAB-15659.json	BioStudies	2026-public	
+posterior_perturb_metadata	https://www.ebi.ac.uk/biostudies/api/v1/studies/E-MTAB-15826	E-MTAB-15826.json	BioStudies	2026-public	
+hspc_metadata	https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE274113&targ=self&form=text&view=full	GSE274113.txt	GEO	2025-public	
+a375_metadata	https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE291147&targ=self&form=text&view=full	GSE291147.txt	GEO	2026-public	
+

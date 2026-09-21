@@ -1,0 +1,6 @@
+id	build_accession	perturbation_accession	match_scope	status
+posterior_organoid	E-MTAB-15659	E-MTAB-15826	WTC/Qian/day30	matrix_metadata_audit_required
+hspc	GSE274113	GSE274113	donor/time/NTC	sample_mapping_required
+a375	GSE291147	GSE291147	DMSO_or_vemurafenib_separate	TF_coverage_and_fragments_required
+cat_atac	GSE288996	GSE288996	iPSC_or_K562_separate	pilot_or_regulator_subset
+

@@ -1,0 +1,9 @@
+name: enhancer-sce2g
+channels: [conda-forge, bioconda]
+dependencies:
+  - python=3.11
+  - mamba=1.5.11
+  - snakemake=7.32.4
+  - pulp<2.8
+  - pytest-xdist
+

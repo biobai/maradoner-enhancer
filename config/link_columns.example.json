@@ -1,0 +1,7 @@
+{
+  "chrom": "chr",
+  "start": "start",
+  "end": "end",
+  "gene_id": "TargetGene",
+  "weight": "E2G.Score.qnorm"
+}

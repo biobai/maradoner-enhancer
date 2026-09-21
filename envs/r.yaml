@@ -1,0 +1,10 @@
+name: enhancer-r
+channels: [conda-forge, bioconda]
+dependencies:
+  - r-base=4.4
+  - r-seurat=5
+  - r-seuratobject=5
+  - r-signac=1
+  - r-matrix
+  - r-jsonlite
+
