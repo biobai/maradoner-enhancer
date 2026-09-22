@@ -32,7 +32,7 @@ for name in STAGE_FILES:
     if deploy.exists():
         subprocess.run([str(mm), 'run', '-p', str(target), 'bash', str(deploy)], check=True, cwd=repo)
     with (prefix / f'{key}.explicit.txt').open('w') as f:
-        subprocess.run([str(mm), 'list', '-p', str(target), '--explicit'], stdout=f, check=True)
+        subprocess.run([str(mm), 'env', 'export', '-p', str(target), '--explicit'], stdout=f, check=True)
     if (target / 'bin/python').exists():
         with (prefix / f'{key}.pip.txt').open('w') as f:
             subprocess.run([str(target / 'bin/python'), '-m', 'pip', 'freeze'], stdout=f, check=True)

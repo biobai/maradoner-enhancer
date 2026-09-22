@@ -14,7 +14,7 @@ environments)
   tar -xjf /tmp/micromamba.tar.bz2 -C "$installed/.runtime" bin/micromamba
   for name in core maradoner r scan sce2g; do
     "$installed/.runtime/bin/micromamba" create -y -p "$installed/.runtime/envs/$name" -f "$installed/envs/$name.yaml"
-    "$installed/.runtime/bin/micromamba" list -p "$installed/.runtime/envs/$name" --explicit > "$installed/build-evidence/$name.explicit.txt"
+    "$installed/.runtime/bin/micromamba" env export -p "$installed/.runtime/envs/$name" --explicit > "$installed/build-evidence/$name.explicit.txt"
   done
   ;;
 sources)
