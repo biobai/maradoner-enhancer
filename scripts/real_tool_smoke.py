@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from me.io import write_json, read_table, run, software_root
-from me.model import fit_activity
 
 
 def main():
@@ -20,28 +19,38 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--python", default=str(installed / ".runtime/envs/maradoner/bin/python"))
     p.add_argument("--with-sce2g", action="store_true")
-    p.add_argument("--maradoner-only", action="store_true")
+    maradoner = p.add_mutually_exclusive_group()
+    maradoner.add_argument("--maradoner-only", action="store_true")
+    maradoner.add_argument("--skip-maradoner", action="store_true",
+                           help="Skip MARADONER/JAX execution on build hosts without AVX")
     args = p.parse_args()
     out = root / "results/real_tool_smoke"
     out.mkdir(parents=True, exist_ok=True)
     status = {"input": "synthetic", "scientific_validation": False, "platform": platform.platform(), "status": "running"}
     write_json(status, out / "status.json")
     try:
-        rng = np.random.default_rng(120)
-        genes = [f"g{i:04d}" for i in range(400)]
-        motifs = [f"m{i}" for i in range(6)]
-        samples = [f"s{i:02d}" for i in range(12)]
-        b = rng.gamma(2, 1, size=(400, 6))
-        b /= np.sqrt((b**2).mean(axis=0))
-        u = rng.normal(0, .25, size=(6, 12))
-        u[0, 6:] += .8
-        y = 5 + rng.normal(0, .5, size=(400, 1)) + b @ u + rng.normal(0, .15, size=(400, 12))
-        settings = {"backend": "maradoner", "python": str(Path(args.python).resolve()),
-                    "repository": str(installed / ".tools/MARADONER"), "timeout_seconds": 1800}
-        values = fit_activity(pd.DataFrame(y, index=genes, columns=samples), pd.DataFrame(b, index=genes, columns=motifs),
-                              {"NT": samples[:6], "KO": samples[6:]}, out / "maradoner", settings, root)
-        assert np.isfinite(values.to_numpy()).all()
-        status["MARADONER"] = {"status": "passed", "genes": 400, "motifs": 6, "samples": 12}
+        if args.skip_maradoner:
+            status["MARADONER"] = {
+                "status": "skipped",
+                "reason": "--skip-maradoner: JAX execution deferred to an AVX-capable host",
+            }
+        else:
+            from me.model import fit_activity
+            rng = np.random.default_rng(120)
+            genes = [f"g{i:04d}" for i in range(400)]
+            motifs = [f"m{i}" for i in range(6)]
+            samples = [f"s{i:02d}" for i in range(12)]
+            b = rng.gamma(2, 1, size=(400, 6))
+            b /= np.sqrt((b**2).mean(axis=0))
+            u = rng.normal(0, .25, size=(6, 12))
+            u[0, 6:] += .8
+            y = 5 + rng.normal(0, .5, size=(400, 1)) + b @ u + rng.normal(0, .15, size=(400, 12))
+            settings = {"backend": "maradoner", "python": str(Path(args.python).resolve()),
+                        "repository": str(installed / ".tools/MARADONER"), "timeout_seconds": 1800}
+            values = fit_activity(pd.DataFrame(y, index=genes, columns=samples), pd.DataFrame(b, index=genes, columns=motifs),
+                                  {"NT": samples[:6], "KO": samples[6:]}, out / "maradoner", settings, root)
+            assert np.isfinite(values.to_numpy()).all()
+            status["MARADONER"] = {"status": "passed", "genes": 400, "motifs": 6, "samples": 12}
         if not args.maradoner_only:
             from me.genome import scan
             (out / "tiny.fa").write_text(">chr1\n" + "ACGT"*100 + "\n")
