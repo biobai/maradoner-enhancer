@@ -1,56 +1,46 @@
-# MARADONER Enhancer Integration: Server Distribution
+# MARADONER Enhancer Integration
 
-Upload this directory to an internet-connected Linux x86_64 server. Root access is not required. It contains production code, configuration, environment specifications, workflows, and operational documentation. Local virtual environments, research datasets, generated results, unit tests, and development validation records are excluded.
+A research workflow for testing whether enhancer links improve motif-family perturbation identification and for exporting regulatory candidates with traceable evidence.
 
-## Installation and execution
+## Container architecture
 
-For older cluster hosts, use the Apptainer/Singularity entry point (see the [container deployment guide](docs/container.md), in Chinese):
+**Podman builds all software before deployment. Runtime installation is disabled.**
+
+One final runtime image contains the complete project. A pinned Debian Bookworm base supports separate internal environments for core Python, MARADONER, R/Seurat/Signac, motif scanning, and the scE2G scheduler. The three upstream scE2G/ENCODE-rE2G/ABC environments are also prebuilt. Conflicting dependency versions are isolated inside this single image rather than split across multiple runtime containers.
+
+The Containerfile has base and software stages. The server runs the completed image; it does not use `bootstrap` to install software. Environment changes require rebuilding the image.
+
+## Build and deploy
+
+On a Linux amd64 build machine with Podman and sufficient memory/disk:
 
 ```bash
-bash scripts/container.sh pull
-bash scripts/container.sh bootstrap
+bash scripts/build_podman.sh
+```
+
+Transfer the project configuration, inputs, and generated `.container/images/` directory to the cluster. Then run:
+
+```bash
+bash scripts/container.sh convert
+bash scripts/container.sh check
 bash scripts/container.sh smoke
 bash scripts/container.sh run --config config/project.yaml --cores 8 --dry-run
+# After preparing and reviewing real inputs:
+bash scripts/container.sh run --config config/project.yaml --cores 8
 ```
 
-This uses a pinned official Bookworm base image and persistent project-local environments. It requires an available cluster container runtime, but no Docker daemon or root access. Existing source downloads are reused; container environments are isolated from the host environments. Use the container wrapper for all subsequent analysis on an older host.
+Podman exports a Docker-compatible archive without requiring Docker. Apptainer/Singularity converts that archive to SIF and runs it on the cluster. Direct registry pulls and runtime bootstrap are disabled.
 
-The current pip-based MARADONER installation requires Linux x86_64 with glibc >= 2.27 because its JAX dependency uses newer Linux wheels. Check with `getconf GNU_LIBC_VERSION`. Older hosts need a suitable newer node or an approved container; upgrading GCC alone is insufficient. Bootstrap checks this before downloading environments and requires binary dependency wheels.
+Software resides under `/opt/maradoner-enhancer` in the image. Only configuration, data, results, logs, workflow working files, and temporary files are writable in the bound project directory. Host `.runtime`, `.tools`, and the old `.container/runtime` are not used for software execution.
 
-From this directory on the server, run:
+The build must pass dependency checks and a real MARADONER/FIMO/R smoke test before producing the final image. Image-level acceptance has not yet been executed on the current Windows development machine. Scientific evaluation on matched biological data remains separate from software acceptance.
 
-```bash
-bash scripts/bootstrap.sh
-bash scripts/check_environment.sh --network
-bash scripts/run_smoke_test.sh
-bash scripts/run_pipeline.sh --config config/project.yaml --cores 8 --dry-run
-# After preparing the documented inputs and updating the configuration:
-bash scripts/run_pipeline.sh --config config/project.yaml --cores 8
-```
+## Inputs and outputs
 
-In this distribution, `run_smoke_test.sh` checks the actual MARADONER, FIMO, and R installations without running the development unit tests. It generates small synthetic inputs; success establishes software operation, not scientific validity. Add `--with-sce2g` to check the official small scE2G example:
+Production inputs require explicit review of donor, batch, condition, cell type, controls, TF labels, raw counts, and genome/motif references. `config/downloads.tsv` lists metadata resources, not complete research datasets. Resource settings in `config/project.yaml` are initial budgets, not measured requirements.
 
-```bash
-bash scripts/run_smoke_test.sh --with-sce2g
-```
+Four arms compare promoters, scE2G enhancer links, distance links, and distance-stratified permutations using a common feature universe. Family MRR is the primary metric. Candidate network edges retain sequence/link evidence without automatic causal or activation/repression labels.
 
-Production inputs still require review and preparation. The project does not infer donor, non-targeting control (NTC), transcription factor (TF), or cell-type labels from undocumented conventions. `config/downloads.tsv` lists small public metadata resources only. Read the [installation and data preparation guide](docs/installation.md) before editing `config/project.yaml`. Resource budgets are initial examples, not measured requirements.
+Reports are written to the configured output/report directory. Complete run manifests, software logs, and failed attempts are retained for audit. A successful run does not automatically establish improved inference.
 
-## Directory layout
-
-If GitHub Git connections fail, bootstrap retrieves MARADONER from the official pinned-commit archive on `codeload.github.com`, with retries and recorded source hashes. Existing verified source is reused. If that host is also inaccessible, download the pinned ZIP on another machine and run `MARADONER_ARCHIVE=/absolute/path/source.zip bash scripts/bootstrap.sh`. scE2G still requires its Git repository and submodules; a plain ZIP is insufficient.
-
-| Directory | Purpose |
-|---|---|
-| src/me | Input adapters, matrices, software interfaces, evaluation, and evidence networks |
-| scripts | Installation, preflight checks, server acceptance, execution, and donor-exclusion robustness |
-| config | Production parameters, candidate datasets, and explicit field-mapping templates |
-| envs | Isolated environments and version constraints |
-| workflow | Snakemake stage scheduling |
-| docs | Scientific design, data contracts, installation, and troubleshooting |
-
-Execution creates `.runtime/`, `.tools/`, `data/`, `results/`, and `tmp/` within the project. Installation does not change system Python or global Conda configuration. Reports are written to the configured output/report directory; failure logs and the complete run manifest remain under output.
-
-Development validation passed 23 tests and a four-arm run using actual MARADONER on synthetic data. Fresh Linux installation, actual scE2G/FIMO/R execution, and biological data evaluation still require server-side validation. A positive scientific result is not an acceptance requirement.
-
-Further documentation, currently in Chinese: [scientific design](docs/design.md), [data dictionary](docs/data_dictionary.md), and [troubleshooting](docs/troubleshooting.md). External software is installed at pinned commits and remains subject to its respective licenses.
+Detailed documentation is currently in Chinese: [container deployment](docs/container.md), [installation and data preparation](docs/installation.md), [scientific design](docs/design.md), [data dictionary](docs/data_dictionary.md), and [troubleshooting](docs/troubleshooting.md).

@@ -1,64 +1,70 @@
-# Apptainer / Singularity 容器部署
+# Podman 构建全部软件 → SIF 集群运行
 
-此入口面向旧 glibc 的 Linux x86_64 集群。宿主机只负责调用已经安装的 Apptainer 或 Singularity；项目工具在固定摘要的 Debian Bookworm / Python 3.11 官方基础镜像内安装和执行。无需 Docker daemon 或用户 root，也不要求在集群上执行 apt-get。集群仍必须允许容器运行；容器共享宿主机内核，不保证能绕过所有内核或管理员策略限制。
+## 架构
 
-## 服务器步骤
+最终只部署 **1 个完整软件镜像**。基础层固定 Debian Bookworm / Python 3.11 镜像摘要，上层在 Podman build 中安装全部阶段依赖。多阶段 Containerfile 中的 base 是构建层，不是额外部署的运行容器。
 
-将新增 `container/`、`scripts/container.sh` 及更新的 `scripts/bootstrap.sh`、`scripts/fetch_maradoner.py` 上传到现有项目对应位置。先检查运行时：
+| 镜像内环境 | 职责与隔离原因 |
+|---|---|
+| core | 数据整理、矩阵、统计、报告与项目 Python 包 |
+| maradoner | MARADONER、JAX、NumPy ≥2.1，独立于旧 scE2G 科学计算栈 |
+| r | Seurat、Signac、Matrix、JSON 接口 |
+| scan | MEME/FIMO、bedtools、htslib |
+| sce2g | 固定 Snakemake 7.32.4 与 Mamba 调度环境，隔离 core 的 Snakemake 8 |
+| upstream stage environments（3 个） | ABC、ENCODE-rE2G、scE2G，遵循固定上游 YAML，另限制 NumPy <2 避免 sklearn 1.2.1 ABI 冲突 |
+
+环境数量不等于容器数量；这些都封装在同一镜像中。依赖冲突用镜像内前缀隔离，当前没有必须拆分运行镜像的系统级冲突。环境安装求解或检查失败会让镜像构建失败，不能因此声称依赖已经兼容。
+
+## 构建机
+
+Linux amd64 上安装并配置 Podman，预留足够磁盘、内存和网络后，在项目根目录运行：
 
 ```bash
-command -v apptainer || command -v singularity
-# 若无输出，查看模块并加载集群实际提供的名称：
-module avail
-# 例如：module load apptainer（仅当集群提供该名称）
+bash scripts/build_podman.sh
 ```
 
-在项目根目录执行：
+构建过程：基础工具检查 → 五套环境 → 固定 MARADONER/scE2G 及子模块 → 三套上游阶段环境 → 安装项目包 → 导入与版本检查 → 真实 MARADONER/FIMO/R 小型测试。每套环境的实际解析清单、pip freeze 和子模块提交保存在镜像 `/opt/maradoner-enhancer/build-evidence` 或 `/opt/me-stage-envs`。构建不是只生成空基础镜像。
+
+首次构建包含较多 Python/R 和生物信息依赖，耗时和磁盘开销较大；Podman 层缓存可复用成功阶段。研究数据、本地环境、结果、Git 历史被 `.containerignore` 排除。此前服务器上的源码下载不再是运行依赖；构建机自行获取固定源码。
+
+导出产物为 `.container/images/maradoner-enhancer-software.tar`、SHA256、Podman 镜像 ID、inspect 元数据与版本记录。此 tar 使用 docker-archive 格式，但构建和导出均由 Podman 完成，不需 Docker daemon。
+
+## 集群运行
+
+上传项目配置与数据，以及 `.container/images/` 后，在有 Apptainer/Singularity 的 Linux x86_64 节点执行：
 
 ```bash
-bash scripts/container.sh pull
-bash scripts/container.sh bootstrap
+bash scripts/container.sh convert
+bash scripts/container.sh check
 bash scripts/container.sh smoke
-bash scripts/container.sh exec bash scripts/check_environment.sh --network
+bash scripts/container.sh exec bash /opt/maradoner-enhancer/scripts/check_environment.sh --network
 bash scripts/container.sh run --config config/project.yaml --cores 8 --dry-run
-# 审核并准备真实输入后：
+# 准备真实输入后：
 bash scripts/container.sh run --config config/project.yaml --cores 8
 ```
 
-`pull` 会拉取固定 amd64 摘要，记录 SIF SHA256，并验证容器启动、基础工具和项目目录写权限。它不表示全部生物信息软件已安装。`bootstrap` 才在容器中建立五个隔离环境。`smoke --with-sce2g` 额外运行 scE2G 官方小例子。
+**没有 bootstrap 步骤。** `container.sh bootstrap` 和 `scripts/bootstrap.sh` 均明确拒绝运行时安装。镜像内软件位于只读 `/opt/maradoner-enhancer`；不绑定/使用宿主 `.runtime`、`.tools`、旧 `.container/runtime`。修改软件依赖需要重新 Podman build 和转换新镜像。
 
-容器内默认不读取宿主用户的 pip/Conda 配置，使用官方 PyPI。需要清华镜像时显式传入：
+`convert` 只读取 Podman 归档转换 SIF、记录来源与校验和，不安装分析软件。同名旧 SIF 来自另一 tar 时会报错，需先保留并移走旧 SIF 及其记录，防止误复用。可在另一台有运行时的 Linux 机器完成转换，再上传 SIF 和来源/校验记录。
 
-```bash
-ME_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple bash scripts/container.sh bootstrap
-```
+## scE2G 的预装环境
 
-## 持久化与已有下载
+构建脚本依据固定 Snakemake 7.32.4 的真实 Env.hash 接口验证并预建缓存，固定缓存前缀为 `/opt/me-stage-envs`。运行前核对三个上游 YAML、post-deploy 脚本和预装环境；缺失或变化直接报错并要求重建。Snakemake 只复用已经存在的环境，运行时 Conda 离线，pip 禁止访问索引。
 
-| 宿主路径 | 用途 |
-|---|---|
-| .container/images | 基础 SIF、SHA256、源镜像 URI |
-| .container/runtime | 容器专用 Micromamba 环境，容器内绑定为项目 .runtime |
-| .container/cache、tmp、home | 镜像缓存、转换临时文件和隔离用户目录 |
-| .tools | 复用已有 MARADONER、scE2G 及子模块源码 |
-| data、results、tmp | 原项目中的持久化数据、结果和分析临时文件 |
+scE2G 上游会在工作流目录下写临时文件并下载参考资源，因此运行时将其工作流文件复制到输出目录的 upstream_workflow。复制工作流与下载参考数据不是安装软件；Python/R 包和可执行程序仍来自镜像。该副本可能较大，首次运行需要额外空间。完整 scE2G 工具/参考数据小测用 `container.sh smoke --with-sce2g`；镜像构建默认不下载完整研究参考资源来执行整条科学流程。
 
-旧宿主 `.runtime` 不删除、不用于容器安装；容器内以子目录绑定将它遮盖。不要在宿主直接执行 `.container/runtime` 中的程序。所有后续安装、smoke 和分析均使用 `container.sh`。环境路径固定在当前项目的真实绝对路径；安装完成后不要移动项目目录。通过 `/home` 软链接进入时，脚本会用 `pwd -P` 统一为实际物理目录。
+## 数据和作业
 
-已有源码复用；环境需要在容器中重建，这是有意隔离宿主 ABI。运行结果仍存原项目目录，退出容器不会丢失。基础镜像是只读的，环境写入绑定的用户目录。
-
-外部数据目录需要显式绑定，并在配置中使用容器可见路径：
+项目路径绑定为相同物理绝对路径。配置、数据、结果、临时文件可写；退出容器后保留。额外数据挂载示例：
 
 ```bash
 ME_CONTAINER_BIND=/PUBLIC/data:/PUBLIC/data bash scripts/container.sh run --config config/project.yaml --cores 8
 ```
 
-同一个分析的预检与运行应使用相同绑定。普通项目内路径不需要额外设置。集群上的计算需在获配资源的计算节点或作业脚本中执行；`--cores` 不是调度器资源申请。
+容器共享宿主内核，需要集群支持运行时。计算在获配资源的节点执行，cores 不代替调度器申请。缺少 Apptainer/Singularity 时先加载集群模块；脚本不安装系统服务。
 
-## 拉取失败或没有容器运行时
+## 验证边界
 
-若没有 Apptainer/Singularity，需要先加载集群模块或请管理员提供受支持运行时；这些脚本不会安装系统运行时。若 Docker Hub 不通，可在另一台 Linux x86_64 机器运行同一 `container.sh pull`，将 `.container/images/` 中的 SIF、SHA256 和 source_uri.txt 一并上传，然后执行 `container.sh check`。不要用不同镜像替换而保留旧校验和。
+开发机可做语法、单元测试和模拟 Podman/Apptainer 参数验证；没有可用 Podman 时不声称镜像已成功构建。构建中的实际环境求解、导入和小测为交付到服务器前必须通过的门槛。真实生物数据的匹配审核、有限试跑和科学评价另行完成。
 
-本次本地验证覆盖 shell 语法与模拟运行时的参数、目录绑定及命令转发；当前 Windows 开发机未实际启动 SIF。真正的服务器验收以 `pull/check`、`bootstrap`、`smoke` 输出为准，不宣称容器已在目标集群运行成功。
-
-参考：[Apptainer OCI 镜像](https://apptainer.org/docs/user/latest/docker_and_oci.html)、[目录绑定](https://apptainer.org/docs/user/latest/bind_paths_and_mounts.html)、[官方 Python Bookworm 镜像定义](https://github.com/docker-library/python/blob/master/3.11/bookworm/Dockerfile)。
+参考：[Podman save](https://docs.podman.io/en/latest/markdown/podman-save.1.html)、[Apptainer 归档转换](https://apptainer.org/docs/user/latest/appendix.html)、[上游 scE2G 三环境定义](https://github.com/EngreitzLab/scE2G/blob/7cb2af750fb96006f5d2b7c5475dcff30ea0e6c9/workflow/envs/sce2g_container.def)。

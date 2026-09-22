@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from .io import run, write_json
+from .io import run, write_json, software_root
 
 MARADONER_COMMIT = "d01f9140bfee69d91e8e1fd3eac1e923e308d9a5"
 
@@ -44,7 +44,7 @@ def fit_activity(expression, B, groups, work, settings, root):
         sources = {str(p.relative_to(repo / "maradoner")).replace("\\", "/"): sha256(p) for p in (repo / "maradoner").rglob("*.py")}
         q = {"expression": str(expr), "loadings": str(load), "groups": str(work / "groups.json"), "work": str(work), "source_hashes": sources}
         write_json(q, work / "request.json")
-        run([settings["python"], str(Path(root) / "scripts/maradoner_bridge.py"), str(work / "request.json")], work / "bridge.log", timeout=settings.get("timeout_seconds", 86400))
+        run([settings["python"], str(software_root(root) / "scripts/maradoner_bridge.py"), str(work / "request.json")], work / "bridge.log", timeout=settings.get("timeout_seconds", 86400))
         result = pd.read_csv(work / "activities.tsv", sep="\t", index_col=0)
     else:
         raise ValueError(f"Unknown backend {backend}; no fallback is permitted")

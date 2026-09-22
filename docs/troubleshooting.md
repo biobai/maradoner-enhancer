@@ -1,38 +1,24 @@
 # 故障排查
 
-## NumPy 源码编译报 GCC 版本不足
-
-这是 pip 未选到兼容二进制包后尝试源码编译的结果。先运行 `getconf GNU_LIBC_VERSION`，不能仅凭 GCC 版本断定操作系统。当前固定 MARADONER 要求 `jax>=0.8`、`jaxlib>=0.8`；已核对 JAXlib 0.8.0 的 CPython 3.11 Linux x86_64 wheel 为 manylinux_2_27。NumPy 2.4.6 的对应 wheel 也要求 glibc 2.27+。
-
-若主机 glibc 低于 2.27，本安装方式不支持，需另选可用的新系统节点或经集群允许的 Apptainer/Singularity 容器。不能只安装新 GCC 或强制降级 JAX 绕过上游依赖。新版 bootstrap 在下载前检查 glibc，并对 MARADONER 的依赖使用 `--only-binary=:all:`，无合适 wheel 时明确失败，不再隐式源码编译。
-
-若 glibc 已满足要求，检查镜像是否缺少 wheel，以及 `pip config debug` 和 PIP_NO_BINARY 等变量。不要在尚未确认原因前重建全部环境。参考：https://pypi.org/project/jaxlib/0.8.0/ 与 https://pypi.org/project/numpy/2.4.6/ 。
-
-若 bootstrap 在 MARADONER 的 GitHub clone 处报 `Empty reply from server`，表示 Git 连接未收到有效响应，不能仅凭此判断具体代理或防火墙原因。更新 `scripts/bootstrap.sh` 和 `scripts/fetch_maradoner.py` 后直接重跑安装。新版使用官方 codeload 固定提交 ZIP、重试并记录源码哈希；既有环境继续复用，无需删除 `.runtime/`。
-
-若服务器也无法访问 codeload，可在能联网的机器下载 `https://codeload.github.com/autosome-ru/MARADONER/zip/d01f9140bfee69d91e8e1fd3eac1e923e308d9a5`，上传 ZIP 后执行：
-
-```bash
-MARADONER_ARCHIVE=/absolute/path/MARADONER-source.zip bash scripts/bootstrap.sh
-```
-
-scE2G 仍需要完整 Git 子模块；不能用普通源码 ZIP 冒充完整安装。网络仍受限时保留新的错误日志，另行准备包含子模块的固定版本源码。
+当前架构为 Podman 构建完整软件镜像、转换 SIF、服务器直接运行。旧的宿主安装日志只供历史诊断；不要继续通过升级宿主 GCC 或重建宿主 Conda 环境修复已封装的软件。
 
 | 现象 | 处理 |
 |---|---|
-| 缺 prepared 文件 | 按安装文档审核、导出标准输入；dry-run 只列缺口，不生成假数据 |
-| Conda 下载或求解失败 | 检查网络、磁盘及 channels；保留日志，重新运行 bootstrap。已有环境不自动更新；调整版本需另建项目副本并记录解析结果 |
-| 真实软件 import/版本错误 | 查看 results/environment 和 bridge.log；不把生产 backend 改为 synthetic_ridge |
-| scE2G 运行失败 | 查看 sce2g.log、其 `.snakemake/log` 与阶段日志；确认上游资源可下载、参考一致、内存足够。该接口固定提交，不承诺任意新版本兼容 |
-| FIMO 位点表异常 | 检查 scan/fimo.log 和独立 fimo.tsv；检查 FASTA 染色体命名、motif MEME 格式、区间长度 |
-| 跨参考/重复/未知 ID | 修正源映射，记录转换，不通过删除检查绕过 |
-| 无可评价 TF | 检查 retained motifs、TF ID、单扰动、同 donor/batch NTC；缺对照不能跨条件凑配对 |
-| 留一 receipt 不匹配 | 从排除该 donor 的 fragments 重新运行链接，samples 中相应 build 行也不纳入 |
-| 内存不足 | 限定细胞类型、分条件、先小数据；模型含稠密矩阵，不能因上游稀疏就假定任意规模可跑 |
-| .run.lock 已存在 | 先检查文件内 PID 是否仍工作；只有确认进程终止后才能手工移除此文件并重跑 |
-| 中途失败后旧报告缺失 | 有意失效，避免把旧成功当本次成功；修正后同命令续跑 |
-| .previous/.running 占空间 | 这些是旧阶段/失败审计产物；确认无需追溯后仅清理对应运行目录，勿递归删除项目根目录 |
+| bootstrap 被拒绝 | 这是预期行为。构建机执行 build_podman.sh，服务器执行 container.sh convert/check/smoke/run |
+| Podman 构建依赖求解失败 | 查看失败的环境层及 YAML，修复后重建；不要在运行容器临时安装软件 |
+| 构建时 GitHub 断连 | 重试构建；MARADONER 使用官方固定提交 ZIP，scE2G 及子模块通过 Git 下载；成功层可复用 |
+| 构建时 NumPy/JAX 编译失败 | MARADONER 依赖限定预编译 wheel，基础系统为 Bookworm；检查源是否提供兼容 wheel，不改宿主 GCC |
+| 三阶段环境未找到/哈希不符 | 必须重新构建镜像，不能让运行时 Snakemake 创建新环境 |
+| SIF 源 tar 校验不符 | 重新完整传输文件；升级镜像前保存并移走旧 SIF 和记录，再 convert |
+| 无 Apptainer/Singularity | 加载集群提供的模块或联系管理员提供运行时，不自动安装系统服务 |
+| 容器启动受限 | 核对集群内核及运行时策略；容器不是虚拟机，不保证绕过所有宿主限制 |
+| 缺 prepared 输入 | 按安装文档审核标准输入；dry-run 只列缺口，不生成假数据 |
+| scE2G 工作目录不完整 | 保留并移走该 output/upstream_workflow 后重跑；不要编辑镜像内源码或环境 |
+| scE2G 参考资源下载失败 | 软件已预装，资源仍需可访问；检查 sce2g.log 和输出目录下的工作流日志 |
+| 重复 ID / 参考冲突 / 缺供体 | 修正源映射并保留转换记录，不绕过检查 |
+| 无可评价 TF | 检查 ID、保留 motif、单 TF 标签及同 donor/batch/condition NTC |
+| 内存不足 | 先限定细胞类型和条件，小数据试跑；模型部分使用稠密矩阵 |
+| .run.lock 已存在 | 先核对 PID；仅在确认旧进程终止后手工移除锁 |
+| 失败后旧报告失效 | 有意防止误把旧成功当本次成功，修正后同命令续跑 |
 
-数值复现：同平台、相同环境/线程和输入可用 `numpy.testing.assert_allclose` 比较活动矩阵（建议 rtol=1e-6、atol=1e-8）；跨 BLAS/JAX/平台需要单独声明容差。边界近似并列的排名可能变化，应检查原差值，不承诺位级跨平台一致。
-
-没有服务器 SSH 信息时，本地交付不会被描述为已经部署。服务器验收顺序：安装 → 合成单测 → 真实工具小测 → 匹配数据有限试跑 → 完整科学评价。
+软件变化必须重建镜像。生物数据分析的数值容差仍需同环境复现检查；跨平台不承诺位级一致。真实工具小测只证明软件执行，不证明增强子改善推断。

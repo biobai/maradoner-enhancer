@@ -1,0 +1,32 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS base
+RUN command -v bash && command -v curl && command -v tar && command -v git \
+    && getconf GNU_LIBC_VERSION && python3 --version
+
+FROM base AS software
+WORKDIR /opt/maradoner-enhancer
+COPY envs/ ./envs/
+COPY container/install_software.sh ./container/install_software.sh
+RUN bash container/install_software.sh environments
+COPY scripts/fetch_maradoner.py ./scripts/fetch_maradoner.py
+RUN bash container/install_software.sh sources
+COPY src/ ./src/
+COPY container/prebuild_sce2g.py ./container/prebuild_sce2g.py
+RUN bash container/install_software.sh stages
+COPY pyproject.toml README.md ./
+COPY scripts/ ./scripts/
+COPY container/check_image.py ./container/check_image.py
+RUN .runtime/envs/core/bin/python -m pip install --no-deps . \
+    && .runtime/envs/core/bin/python -m pip check
+ENV ME_SOFTWARE_ROOT=/opt/maradoner-enhancer ME_PREBUILT_CONDA=/opt/me-stage-envs
+ENV PYTHONNOUSERSITE=1 JAX_PLATFORMS=cpu MPLBACKEND=Agg
+ENV PATH=/opt/maradoner-enhancer/.runtime/envs/core/bin:/opt/maradoner-enhancer/.runtime/envs/scan/bin:/opt/maradoner-enhancer/.runtime/envs/r/bin:/usr/local/bin:/usr/bin:/bin
+# Imports, CLI checks and a real MARADONER/FIMO/R smoke run are build gates.
+RUN .runtime/envs/core/bin/python container/check_image.py \
+    && ME_PROJECT_ROOT=/tmp/image-smoke .runtime/envs/core/bin/python scripts/real_tool_smoke.py \
+    && cp /tmp/image-smoke/results/real_tool_smoke/status.json build-evidence/real-tool-smoke.json
+ENV PIP_NO_INDEX=1 CONDA_OFFLINE=true
+LABEL org.opencontainers.image.title="MARADONER enhancer complete software"
+LABEL org.opencontainers.image.description="All project and scE2G stage software installed at build time; no runtime bootstrap"
+WORKDIR /work
+CMD ["bash"]

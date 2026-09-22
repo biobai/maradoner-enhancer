@@ -63,10 +63,28 @@ def sha256_bytes(df):
 
 
 def run_sce2g(repository, fragments, output, snakemake, cores=4, memory_mb=32000, dry_run=False):
+    import os
+    import shutil
+    from .prebuilt import verify_stage_environments
     repo, output, fragments = map(lambda x: Path(x).resolve(), (repository, output, fragments))
-    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+    sha = subprocess.check_output(["git", "-c", f"safe.directory={repo}", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     if sha != COMMIT:
         raise ValueError(f"Unaudited scE2G revision {sha}")
+    prebuilt = os.environ.get('ME_PREBUILT_CONDA')
+    if prebuilt:
+        verify_stage_environments(repo, prebuilt)
+        # The immutable image supplies software; only workflow/data files are copied
+        # to writable storage because upstream downloads reference data into resources/.
+        workspace = output / 'upstream_workflow'
+        marker = workspace / '.image_source_commit'
+        if workspace.exists():
+            if not marker.exists() or marker.read_text().strip() != sha:
+                raise ValueError('Incomplete or mismatched scE2G workspace; preserve/move it before retrying')
+        else:
+            shutil.copytree(repo, workspace, ignore=shutil.ignore_patterns('.git', '.snakemake', '__pycache__'))
+            marker.write_text(sha)
+        verify_stage_environments(workspace, prebuilt)
+        repo = workspace
     provenance_file = Path(str(fragments) + ".provenance.json")
     receipt = json.loads(provenance_file.read_text())
     if receipt["fragments_sha256"] != sha256(fragments):
@@ -85,7 +103,7 @@ def run_sce2g(repository, fragments, output, snakemake, cores=4, memory_mb=32000
                max_cell_count=receipt["n_with_fragments"] + 1)
     config = output / "sce2g.yaml"
     config.write_text(yaml.safe_dump(cfg), encoding="utf-8")
-    command = [snakemake, "--configfile", str(config), "--cores", str(cores), "--use-conda", "--conda-prefix", str(output / "conda_envs")]
+    command = [snakemake, "--configfile", str(config), "--cores", str(cores), "--use-conda", "--conda-prefix", prebuilt or str(output / "conda_envs")]
     if dry_run:
         command.append("--dry-run")
     import os

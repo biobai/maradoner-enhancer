@@ -10,6 +10,11 @@ import pandas as pd
 import yaml
 
 
+def software_root(project_root):
+    """Immutable image software location, or project-local development installation."""
+    return Path(os.environ.get("ME_SOFTWARE_ROOT", project_root)).resolve()
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -78,6 +83,10 @@ def config(path):
     for k in ("python", "repository"):
         if c.get("maradoner", {}).get(k):
             c["maradoner"][k] = str((root / c["maradoner"][k]).resolve())
+    if os.environ.get("ME_SOFTWARE_ROOT") and c.get("maradoner", {}).get("backend") == "maradoner":
+        installed = software_root(root)
+        c["maradoner"]["python"] = str(installed / ".runtime/envs/maradoner/bin/python")
+        c["maradoner"]["repository"] = str(installed / ".tools/MARADONER")
     return c
 
 

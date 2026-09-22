@@ -4,7 +4,7 @@ import shutil
 import sys
 from pathlib import Path
 import psutil
-from .io import write_json
+from .io import write_json, software_root
 
 
 def check(c, network=False):
@@ -17,9 +17,9 @@ def check(c, network=False):
     if c["maradoner"]["backend"] == "maradoner":
         for name, path in {"MARADONER_python": c["maradoner"]["python"],
                            "MARADONER_source": c["maradoner"]["repository"],
-                           "Rscript": str(Path(c["_root"])/".runtime/envs/r/bin/Rscript"),
-                           "FIMO": str(Path(c["_root"])/".runtime/envs/scan/bin/fimo"),
-                           "scE2G_snakemake": str(Path(c["_root"])/".runtime/envs/sce2g/bin/snakemake")}.items():
+                           "Rscript": str(software_root(c["_root"])/".runtime/envs/r/bin/Rscript"),
+                           "FIMO": str(software_root(c["_root"])/".runtime/envs/scan/bin/fimo"),
+                           "scE2G_snakemake": str(software_root(c["_root"])/".runtime/envs/sce2g/bin/snakemake")}.items():
             dependencies[name] = Path(path).exists()
             if not dependencies[name]:
                 issues.append(f"Missing {name}: {path}")

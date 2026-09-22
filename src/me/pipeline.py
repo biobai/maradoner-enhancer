@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from . import __version__
-from .io import read_table, write_table, write_json, sha256
+from .io import read_table, write_table, write_json, sha256, software_root
 from .validate import load_inputs
 from .matrices import build_matrices, distance_links, permute_links, scale_arms, normalize_counts
 from .model import fit_activity
@@ -248,7 +248,7 @@ def fingerprint(c):
     inputs = {k: sha256(v) for k, v in c["inputs"].items() if v}
     source = Path(__file__).parent
     code = {str(p.relative_to(source)): sha256(p) for p in sorted(source.glob("*.py"))}
-    code["maradoner_bridge.py"] = sha256(Path(c["_root"]) / "scripts/maradoner_bridge.py")
+    code["maradoner_bridge.py"] = sha256(software_root(c["_root"]) / "scripts/maradoner_bridge.py")
     import importlib.metadata
     versions = {k: importlib.metadata.version(k) for k in ("numpy", "pandas", "scipy", "pyarrow", "pyyaml")}
     if c["maradoner"]["backend"] == "maradoner":
@@ -257,7 +257,8 @@ def fingerprint(c):
             "import importlib.metadata as m,json; print(json.dumps(sorted((d.metadata['Name'],d.version) for d in m.distributions())))"], text=True).strip()
         repo = Path(c["maradoner"]["repository"])
         code.update({"upstream/"+str(p.relative_to(repo)): sha256(p) for p in sorted((repo / "maradoner").rglob("*.py"))})
-    return hashlib.sha256(json.dumps({"config": c, "inputs": inputs, "code": code, "versions": versions}, sort_keys=True).encode()).hexdigest(), inputs
+    return hashlib.sha256(json.dumps({"config": c, "inputs": inputs, "code": code, "versions": versions,
+        "container_image_sha256": os.environ.get("ME_CONTAINER_IMAGE_SHA256")}, sort_keys=True).encode()).hexdigest(), inputs
 
 
 def pipeline(c, until="report", dry_run=False, force=False):
@@ -278,7 +279,8 @@ def pipeline(c, until="report", dry_run=False, force=False):
     except FileExistsError:
         raise RuntimeError(f"Run lock exists: {lock}; check PID before manual removal") from None
     os.write(fd, str(os.getpid()).encode()); os.close(fd)
-    record = {"started": time.time(), "status": "running", "version": __version__, "platform": platform.platform(), "config": c}
+    record = {"started": time.time(), "status": "running", "version": __version__, "platform": platform.platform(), "config": c,
+              "container_image_sha256": os.environ.get("ME_CONTAINER_IMAGE_SHA256")}
     try:
         key, inputs = fingerprint(c)
         record.update(fingerprint=key, inputs=inputs, stages=[])

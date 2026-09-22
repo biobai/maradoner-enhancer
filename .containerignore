@@ -1,0 +1,16 @@
+**
+!container/
+!container/**
+!envs/
+!envs/**
+!src/
+!src/me/
+!src/me/*.py
+!scripts/
+!scripts/*.sh
+!scripts/*.py
+!scripts/*.R
+!pyproject.toml
+!README.md
+**/__pycache__/
+**/*.pyc
