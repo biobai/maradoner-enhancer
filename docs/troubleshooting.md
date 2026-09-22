@@ -1,5 +1,23 @@
 # 故障排查
 
+## NumPy 源码编译报 GCC 版本不足
+
+这是 pip 未选到兼容二进制包后尝试源码编译的结果。先运行 `getconf GNU_LIBC_VERSION`，不能仅凭 GCC 版本断定操作系统。当前固定 MARADONER 要求 `jax>=0.8`、`jaxlib>=0.8`；已核对 JAXlib 0.8.0 的 CPython 3.11 Linux x86_64 wheel 为 manylinux_2_27。NumPy 2.4.6 的对应 wheel 也要求 glibc 2.27+。
+
+若主机 glibc 低于 2.27，本安装方式不支持，需另选可用的新系统节点或经集群允许的 Apptainer/Singularity 容器。不能只安装新 GCC 或强制降级 JAX 绕过上游依赖。新版 bootstrap 在下载前检查 glibc，并对 MARADONER 的依赖使用 `--only-binary=:all:`，无合适 wheel 时明确失败，不再隐式源码编译。
+
+若 glibc 已满足要求，检查镜像是否缺少 wheel，以及 `pip config debug` 和 PIP_NO_BINARY 等变量。不要在尚未确认原因前重建全部环境。参考：https://pypi.org/project/jaxlib/0.8.0/ 与 https://pypi.org/project/numpy/2.4.6/ 。
+
+若 bootstrap 在 MARADONER 的 GitHub clone 处报 `Empty reply from server`，表示 Git 连接未收到有效响应，不能仅凭此判断具体代理或防火墙原因。更新 `scripts/bootstrap.sh` 和 `scripts/fetch_maradoner.py` 后直接重跑安装。新版使用官方 codeload 固定提交 ZIP、重试并记录源码哈希；既有环境继续复用，无需删除 `.runtime/`。
+
+若服务器也无法访问 codeload，可在能联网的机器下载 `https://codeload.github.com/autosome-ru/MARADONER/zip/d01f9140bfee69d91e8e1fd3eac1e923e308d9a5`，上传 ZIP 后执行：
+
+```bash
+MARADONER_ARCHIVE=/absolute/path/MARADONER-source.zip bash scripts/bootstrap.sh
+```
+
+scE2G 仍需要完整 Git 子模块；不能用普通源码 ZIP 冒充完整安装。网络仍受限时保留新的错误日志，另行准备包含子模块的固定版本源码。
+
 | 现象 | 处理 |
 |---|---|
 | 缺 prepared 文件 | 按安装文档审核、导出标准输入；dry-run 只列缺口，不生成假数据 |

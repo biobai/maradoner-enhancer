@@ -1,5 +1,6 @@
 .venv/
 .runtime/
+.container/
 .tools/
 .snakemake/
 .pytest_cache/
@@ -10,4 +11,3 @@ results/
 tmp/
 dist/
 *.pyc
-
