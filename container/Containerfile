@@ -26,6 +26,10 @@ ENV PATH=/opt/maradoner-enhancer/.runtime/envs/core/bin:/opt/maradoner-enhancer/
 RUN .runtime/envs/core/bin/python container/check_image.py \
     && ME_PROJECT_ROOT=/tmp/image-smoke .runtime/envs/core/bin/python scripts/real_tool_smoke.py --skip-maradoner \
     && cp /tmp/image-smoke/results/real_tool_smoke/status.json build-evidence/real-tool-smoke.json
+# Apptainer/Singularity runs as the cluster user, not the image build user.
+# Preserve executable bits while making installed files readable and directories traversable.
+RUN chmod a+rx /opt \
+    && chmod -R a+rX /opt/maradoner-enhancer /opt/me-stage-envs
 ENV PIP_NO_INDEX=1 CONDA_OFFLINE=true
 LABEL org.opencontainers.image.title="MARADONER enhancer complete software"
 LABEL org.opencontainers.image.description="All project and scE2G stage software installed at build time; no runtime bootstrap"
