@@ -16,8 +16,9 @@ RUN bash container/install_software.sh stages
 COPY pyproject.toml README.md ./
 COPY scripts/ ./scripts/
 COPY container/check_image.py ./container/check_image.py
-RUN .runtime/envs/core/bin/python -m pip install --no-deps . \
-    && .runtime/envs/core/bin/python -m pip check
+RUN .runtime/envs/core/bin/python -m pip install --no-cache-dir --no-deps . \
+    && .runtime/envs/core/bin/python -m pip check \
+    && rm -rf -- /opt/maradoner-enhancer/build
 ENV ME_SOFTWARE_ROOT=/opt/maradoner-enhancer ME_PREBUILT_CONDA=/opt/me-stage-envs
 ENV PYTHONNOUSERSITE=1 JAX_PLATFORMS=cpu MPLBACKEND=Agg
 ENV PATH=/opt/maradoner-enhancer/.runtime/envs/core/bin:/opt/maradoner-enhancer/.runtime/envs/scan/bin:/opt/maradoner-enhancer/.runtime/envs/r/bin:/usr/local/bin:/usr/bin:/bin
@@ -25,7 +26,8 @@ ENV PATH=/opt/maradoner-enhancer/.runtime/envs/core/bin:/opt/maradoner-enhancer/
 # Defer MARADONER/JAX execution to the AVX-capable production cluster.
 RUN .runtime/envs/core/bin/python container/check_image.py \
     && ME_PROJECT_ROOT=/tmp/image-smoke .runtime/envs/core/bin/python scripts/real_tool_smoke.py --skip-maradoner \
-    && cp /tmp/image-smoke/results/real_tool_smoke/status.json build-evidence/real-tool-smoke.json
+    && cp /tmp/image-smoke/results/real_tool_smoke/status.json build-evidence/real-tool-smoke.json \
+    && rm -rf -- /tmp/image-smoke
 # Apptainer/Singularity runs as the cluster user, not the image build user.
 # Preserve executable bits while making installed files readable and directories traversable.
 RUN chmod a+rx /opt \

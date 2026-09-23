@@ -4,6 +4,7 @@ set -euo pipefail
 installed=/opt/maradoner-enhancer
 export MAMBA_ROOT_PREFIX="$installed/.runtime"
 export CONDA_PKGS_DIRS="$installed/.runtime/pkgs"
+export PIP_NO_CACHE_DIR=1
 export CONDARC="$installed/.runtime/condarc"
 export PATH="$installed/.runtime/envs/sce2g/bin:$installed/.runtime/envs/core/bin:$PATH"
 mkdir -p "$installed/.runtime/bin" "$installed/.tools" "$installed/build-evidence"
@@ -12,10 +13,12 @@ environments)
   printf 'channels:\n  - conda-forge\n  - bioconda\nchannel_priority: flexible\n' > "$CONDARC"
   curl --fail --location --retry 3 https://micro.mamba.pm/api/micromamba/linux-64/2.0.5 -o /tmp/micromamba.tar.bz2
   tar -xjf /tmp/micromamba.tar.bz2 -C "$installed/.runtime" bin/micromamba
+  rm -f -- /tmp/micromamba.tar.bz2
   for name in core maradoner r scan sce2g; do
     "$installed/.runtime/bin/micromamba" create -y -p "$installed/.runtime/envs/$name" -f "$installed/envs/$name.yaml"
     "$installed/.runtime/bin/micromamba" env export -p "$installed/.runtime/envs/$name" --explicit > "$installed/build-evidence/$name.explicit.txt"
   done
+  "$installed/.runtime/bin/micromamba" clean --all --yes
   ;;
 sources)
   "$installed/.runtime/envs/core/bin/python" "$installed/scripts/fetch_maradoner.py" --destination "$installed/.tools/MARADONER"
@@ -36,6 +39,7 @@ stages)
   # Core module is pure Python here; no editable installation or runtime pip is needed.
   export PYTHONPATH="$installed/src"
   "$installed/.runtime/envs/sce2g/bin/python" "$installed/container/prebuild_sce2g.py"
+  "$installed/.runtime/bin/micromamba" clean --all --yes
   ;;
 *) echo 'Unknown build stage' >&2; exit 2 ;;
 esac
