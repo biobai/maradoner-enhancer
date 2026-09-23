@@ -7,6 +7,9 @@ action="${1:-help}"
 if [[ $# -gt 0 ]]; then shift; fi
 if [[ "$action" == help || "$action" == --help ]]; then
   echo 'Usage: bash scripts/container.sh {convert|check|smoke|run|exec} [arguments]'
+  echo 'Build host: convert the Podman archive with container.sh convert.'
+  echo 'Server: upload .container/images/maradoner-enhancer-software.sif, then use check, smoke, run, or exec.'
+  echo 'The .sif.sha256 checksum is optional but verified when present; the tar archive is only needed for convert.'
   echo 'Examples: container.sh smoke --with-sce2g; container.sh run --config config/project.yaml --cores 8'
   exit 0
 fi
@@ -34,7 +37,7 @@ export SINGULARITY_TMPDIR="$state/tmp"
 sif="$state/images/maradoner-enhancer-software.sif"
 if [[ "$action" == convert ]]; then
   archive="$state/images/maradoner-enhancer-software.tar"
-  [[ -f "$archive" && -f "$archive.sha256" ]] || { echo 'Missing Podman image archive/checksum. Run build_podman.sh on the build machine and transfer .container/images.' >&2; exit 1; }
+  [[ -f "$archive" && -f "$archive.sha256" ]] || { echo 'Conversion requires the Podman archive/checksum on the build machine. For an uploaded SIF, use check, smoke, run, or exec instead of convert.' >&2; exit 1; }
   (cd -- "$state/images" && sha256sum -c maradoner-enhancer-software.tar.sha256)
   archive_hash=$(sha256sum "$archive" | awk '{print $1}')
   if [[ -f "$sif" ]]; then
@@ -61,9 +64,14 @@ if [[ "$action" == convert ]]; then
   fi
   action=check
 fi
-[[ -f "$sif" && -f "$sif.sha256" && -f "$sif.source-sha256" ]] || { echo 'Container image or provenance is missing. Run: bash scripts/container.sh convert' >&2; exit 1; }
-(cd -- "$state/images" && sha256sum -c maradoner-enhancer-software.sif.sha256)
-image_hash=$(awk '{print $1}' "$sif.sha256")
+# Server execution needs only the SIF; archive provenance stays on the build host.
+[[ -f "$sif" ]] || { echo "Missing SIF: $sif. Upload the SIF converted on the build machine." >&2; exit 1; }
+if [[ -f "$sif.sha256" ]]; then
+  (cd -- "$state/images" && sha256sum -c maradoner-enhancer-software.sif.sha256)
+else
+  echo 'No SIF checksum supplied; transfer integrity has not been verified.' >&2
+fi
+image_hash=$(sha256sum "$sif" | awk '{print $1}')
 # Bind the project at its physical host path, preserving absolute paths in Conda scripts.
 # All software comes from the image at /opt/maradoner-enhancer; no host environment is mounted.
 options=(exec --cleanenv --contain --home "$state/home:/home/me"
